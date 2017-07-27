@@ -469,15 +469,6 @@ void mmc_recovery_fallback_lower_speed(struct mmc_host *host)
 	if (!host->card)
 		return;
 
-	if (host->sdr104_wa && mmc_card_sd(host->card) &&
-	    (host->ios.timing == MMC_TIMING_UHS_SDR104) &&
-	    !host->card->sdr104_blocked) {
-		pr_err("%s: %s: blocked SDR104, lower the bus-speed (SDR50 / DDR50)\n",
-			mmc_hostname(host), __func__);
-		mmc_host_clear_sdr104(host);
-		mmc_hw_reset(host);
-		host->card->sdr104_blocked = true;
-	}
 }
 
 static int mmc_devfreq_set_target(struct device *dev,
@@ -531,9 +522,6 @@ static int mmc_devfreq_set_target(struct device *dev,
 	if (abort)
 		goto out;
 
-	if (mmc_card_sd(host->card) && host->card->sdr104_blocked)
-		goto rel_host;
-
 	/*
 	 * In case we were able to claim host there is no need to
 	 * defer the frequency change. It will be done now
@@ -553,8 +541,6 @@ static int mmc_devfreq_set_target(struct device *dev,
 
 
 	mmc_host_clk_release(host);
-rel_host:
-	mmc_release_host(host);
 out:
 	tsk_restore_flags(current, pflags, PF_MEMALLOC);
 	return err;
@@ -573,9 +559,6 @@ void mmc_deferred_scaling(struct mmc_host *host)
 	int err;
 
 	if (!host->clk_scaling.enable)
-		return;
-
-	if (mmc_card_sd(host->card) && host->card->sdr104_blocked)
 		return;
 
 	spin_lock_bh(&host->clk_scaling.lock);
